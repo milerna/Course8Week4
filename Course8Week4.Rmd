@@ -1,0 +1,101 @@
+---
+title: "Predictive analysis of activity"
+author: "Elena Schnell"
+date: "10 November 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data processing
+
+```{r Initialise,message=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+set.seed(1290)
+```
+
+First we load the data and replace missing, NA and #DIV/0! values with NA.
+
+```{r Data loading,message=FALSE}
+trainURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(trainURL),na.strings=c('#DIV/0!', '', 'NA'))
+testing <- read.csv(url(testURL),na.strings=c('#DIV/0!', '', 'NA'))
+```
+Then we clean the data by removing columns with NA entries.
+
+```{r Data cleaning, message=FALSE}
+training <- training[, colSums(is.na(training)) == 0]
+```
+We further remove Near-Zero Variance variables.
+
+```{r NZV, message=FALSE}
+nzv <- nearZeroVar(training)
+training<-training[,-nzv]
+```
+We look at the data and remove not needed columns
+```{r Exploratory Analysis, results='hide'}
+head(training)
+training<-training[,-c(1:6)]
+```
+Then we check the outcome variable
+```{r y}
+table(training$classe)
+prop.table(table(training$classe))
+```
+### Cross Validation
+Now that we have reduced the number of variables, we create a training (60%) and test set (40%) for cross validation:
+
+```{r, message=FALSE}
+inTrain=createDataPartition(y=training$classe, p=0.6, list=FALSE)
+    subtrain <-training[inTrain,]
+    subtest <- training[-inTrain,]
+```
+
+## Model selection
+We compare a decision tree and random forest method.
+
+### Decision Tree
+We build the decision tree and use the function fancyRpartPlot() to plot the classification tree as a dendogram. Then we validate the model, which was build on the subtrain data, on the subtest data.
+
+```{r dt, fig.width=15, fig.height=10}
+modfit1 <- train(classe ~ .,method='rpart',data=subtrain)
+    fancyRpartPlot(modfit1$finalModel) 
+     pred=predict(modfit1,newdata=subtest)
+    z=confusionMatrix(pred,subtest$classe)
+    z$table
+    z$overall[1]
+    ```
+The accuracy of the model is only 0.49, which would mean a big out-of-sample error of 0.51.
+
+### Random Forest
+We first determine the model and then again validate it on the subtest data.
+```{r rf}
+modfit2 <- train(classe ~ .,method='rf',data=subtrain)
+     pred2=predict(modfit2,newdata=subtest)
+    z2=confusionMatrix(pred2,subtest$classe)
+    z2$table
+    z2$overall[1]
+    ```
+    
+As the random forest has a accuracy of 0.99 compared to an accuracy of 0.49 of the decision tree, we will use the random forest method.The out-of-sample error is then only 0.0028.
+
+## Predicting
+
+We then use our model to predict the 20 cases in the test data, which was kept unchanged.
+
+```{r pred}
+predicted=predict(modfit2,newdata=testing)
+predicted
+    ```
